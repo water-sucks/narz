@@ -3,7 +3,12 @@
     .version = "0.1.0",
     .fingerprint = 0x1e717d6d3bf58001, // Changing this has security and trust implications.
     .minimum_zig_version = "0.14.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .flags = .{
+            .url = "git+https://github.com/n0s4/flags#0e2491d8e6d2be38dc0c2ce8e103469886e468bb",
+            .hash = "flags-0.10.0-a_9h3kR2AABNAfaPGRyOOGmWsfv12Hk6JQPTX4MM446s",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",
