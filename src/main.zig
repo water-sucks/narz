@@ -39,15 +39,9 @@ pub fn main() !u8 {
     const parsedFlags = flags.parseOrExit(args, "narz", Flags, parseFlagOptions);
 
     _ = switch (parsedFlags.command) {
-        .cat => |catFlags| {
-            log.info("cat {s} {s}", .{ catFlags.positional.archive, catFlags.positional.path });
-        },
-        .ls => |lsFlags| {
-            log.info("ls {s}", .{lsFlags.positional.archive});
-        },
-        .pack => |packFlags| {
-            log.info("pack {s}", .{packFlags.positional.path});
-        },
+        .cat => |catFlags| catCmd.catMain(alloc, catFlags),
+        .ls => |lsFlags| lsCmd.lsMain(alloc, lsFlags),
+        .pack => |packFlags| packCmd.packMain(alloc, packFlags),
         .unpack => |unpackFlags| unpackCmd.unpackMain(alloc, unpackFlags),
     } catch return 1;
 
