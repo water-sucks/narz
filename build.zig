@@ -7,6 +7,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const flags_dep = b.dependency("flags", .{ .target = target, .optimize = optimize });
+
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/lib.zig"),
         .target = target,
@@ -19,10 +21,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Modules can depend on one another using the `std.Build.Module.addImport` function.
-    // This is what allows Zig source code to use `@import("foo")` where 'foo' is not a
-    // file path. In this case, we set up `exe_mod` to import `lib_mod`.
     exe_mod.addImport("narz", lib_mod);
+    exe_mod.addImport("flags", flags_dep.module("flags"));
 
     const lib = b.addLibrary(.{
         .linkage = .static,

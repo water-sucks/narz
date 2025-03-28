@@ -1,38 +1,55 @@
 const std = @import("std");
+const heap = std.heap;
+const process = std.process;
+const posix = std.posix;
+
+const flags = @import("flags");
 const narz = @import("narz");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const log = @import("cmd/log.zig");
+const Flags = @import("cmd/args.zig").Flags;
+
+const catCmd = @import("cmd/cat.zig");
+const lsCmd = @import("cmd/ls.zig");
+const unpackCmd = @import("cmd/unpack.zig");
+const packCmd = @import("cmd/pack.zig");
+
+pub fn main() !u8 {
+    var gpa = heap.GeneralPurposeAllocator(.{}){};
     defer {
         _ = gpa.deinit();
     }
     const alloc = gpa.allocator();
 
-    var args = try std.process.argsWithAllocator(alloc);
-    defer args.deinit();
+    if (posix.getenv("NO_COLOR") != null) {
+        log.use_color = false;
+    }
 
-    _ = args.next();
-    const archiveFilename = args.next() orelse {
-        std.debug.print("error: missing archive path\n", .{});
-        return;
+    const args = process.argsAlloc(alloc) catch |err| {
+        log.err("failed to allocate arguments: {s}", .{@errorName(err)});
+        return 1;
     };
+    defer process.argsFree(alloc, args);
 
-    const archiveFile = std.fs.cwd().openFile(archiveFilename, .{}) catch |err| {
-        std.debug.print("error: failed to open archive: {s}\n", .{@errorName(err)});
-        return;
-    };
-    defer archiveFile.close();
+    var parseFlagOptions: flags.Options = .{};
+    if (!log.use_color) {
+        parseFlagOptions.colors = &.{};
+    }
 
-    var parsed = narz.Parser.parseFromReader(alloc, archiveFile.reader()) catch |err| {
-        std.debug.print("error: failed to parse archive: {s}\n", .{@errorName(err)});
-        return;
-    };
-    defer parsed.deinit();
+    const parsedFlags = flags.parseOrExit(args, "narz", Flags, parseFlagOptions);
 
-    const archive = parsed.value;
+    _ = switch (parsedFlags.command) {
+        .cat => |catFlags| {
+            log.info("cat {s} {s}", .{ catFlags.positional.archive, catFlags.positional.path });
+        },
+        .ls => |lsFlags| {
+            log.info("ls {s}", .{lsFlags.positional.archive});
+        },
+        .pack => |packFlags| {
+            log.info("pack {s}", .{packFlags.positional.path});
+        },
+        .unpack => |unpackFlags| unpackCmd.unpackMain(alloc, unpackFlags),
+    } catch return 1;
 
-    const repr = try archive.stringRepr(alloc);
-    defer alloc.free(repr);
-
-    std.debug.print("{s}", .{repr});
+    return 0;
 }
