@@ -9,11 +9,19 @@ pub fn build(b: *std.Build) void {
 
     const flags_dep = b.dependency("flags", .{ .target = target, .optimize = optimize });
 
+    const utils_mod = b.createModule(.{
+        .root_source_file = b.path("src/utils.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    lib_mod.addImport("utils", utils_mod);
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -22,6 +30,8 @@ pub fn build(b: *std.Build) void {
     });
 
     exe_mod.addImport("narz", lib_mod);
+    exe_mod.addImport("utils", utils_mod);
+
     exe_mod.addImport("flags", flags_dep.module("flags"));
 
     const lib = b.addLibrary(.{

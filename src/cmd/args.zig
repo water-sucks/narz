@@ -32,7 +32,6 @@ pub const LsFlags = struct {
     long: bool,
     json: bool,
     recursive: bool,
-    directory: bool,
 
     positional: struct {
         archive: []const u8,
@@ -48,14 +47,12 @@ pub const LsFlags = struct {
         .long = "Show detailed file information",
         .json = "Produce JSON output",
         .recursive = "List subdirectories recursively",
-        .directory = "Show directories rather than their contents",
     };
 
     pub const switches = .{
         .long = 'l',
         .json = 'j',
         .recursive = 'r',
-        .directory = 'd',
     };
 };
 

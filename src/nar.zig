@@ -4,6 +4,8 @@ const fs = std.fs;
 const Allocator = mem.Allocator;
 const ArrayList = std.ArrayList;
 
+const utils = @import("utils");
+
 pub const NarArchive = struct {
     version: usize,
     object: NarObject,
@@ -21,7 +23,14 @@ pub const NarArchive = struct {
     }
 
     pub fn getObject(self: NarArchive, alloc: Allocator, path: []const u8) !?NarObject {
-        var it = fs.path.componentIterator(path) catch return null;
+        const normalizedPath = try utils.normalizePath(alloc, path);
+        defer alloc.free(normalizedPath);
+
+        if (mem.eql(u8, normalizedPath, "/")) {
+            return self.object;
+        }
+
+        var it = fs.path.componentIterator(normalizedPath) catch return null;
 
         var stack = ArrayList(NarObject).init(alloc);
         defer stack.deinit();
@@ -30,17 +39,6 @@ pub const NarArchive = struct {
 
         componentTraversal: while (it.next()) |component| {
             const current = stack.items[stack.items.len - 1];
-
-            if (mem.eql(u8, component.name, ".")) {
-                continue;
-            }
-
-            if (mem.eql(u8, component.name, "..")) {
-                if (stack.items.len > 1) {
-                    _ = stack.pop();
-                }
-                continue;
-            }
 
             if (std.meta.activeTag(current) != .directory) {
                 // There are no more components to traverse past.
