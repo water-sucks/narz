@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .flags = .{
-            .url = "git+https://github.com/n0s4/flags#0e2491d8e6d2be38dc0c2ce8e103469886e468bb",
-            .hash = "flags-0.10.0-a_9h3kR2AABNAfaPGRyOOGmWsfv12Hk6JQPTX4MM446s",
+            .url = "git+https://github.com/n0s4/flags#f5ff1c9793c32f2597fdb036eb0336b06de7bf1d",
+            .hash = "flags-0.10.0-a_9h3pxvAADK9fDQw0ONVfZJNBUViUWBYq8uha0IP9zn",
         },
     },
     .paths = .{

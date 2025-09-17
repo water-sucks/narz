@@ -19,20 +19,21 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{ .name = "utils", .module = utils_mod },
+        },
     });
-
-    lib_mod.addImport("utils", utils_mod);
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{ .name = "narz", .module = lib_mod },
+            .{ .name = "utils", .module = utils_mod },
+            .{ .name = "flags", .module = flags_dep.module("flags") },
+        },
     });
-
-    exe_mod.addImport("narz", lib_mod);
-    exe_mod.addImport("utils", utils_mod);
-
-    exe_mod.addImport("flags", flags_dep.module("flags"));
 
     const lib = b.addLibrary(.{
         .linkage = .static,
