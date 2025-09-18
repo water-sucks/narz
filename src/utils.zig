@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const fs = std.fs;
 const Allocator = mem.Allocator;
-const ArrayList = std.ArrayList;
+const ArrayList = std.array_list.Managed;
 
 pub fn normalizePath(alloc: Allocator, path: []const u8) ![]const u8 {
     var stack = ArrayList([]const u8).init(alloc);

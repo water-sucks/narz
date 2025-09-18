@@ -36,7 +36,7 @@ pub fn main() !u8 {
         parseFlagOptions.colors = &.{};
     }
 
-    const parsedFlags = flags.parseOrExit(args, "narz", Flags, parseFlagOptions);
+    const parsedFlags = flags.parse(args, "narz", Flags, parseFlagOptions);
 
     _ = switch (parsedFlags.command) {
         .cat => |catFlags| catCmd.catMain(alloc, catFlags),

@@ -36,7 +36,7 @@ pub fn ANSIFilter(comptime WriterType: type) type {
         use_color: bool = true,
 
         pub const Error = WriterType.Error;
-        pub const Writer = io.Writer(*Self, Error, write);
+        pub const Writer = io.GenericWriter(*Self, Error, write);
 
         const Self = @This();
 

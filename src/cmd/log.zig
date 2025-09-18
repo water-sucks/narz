@@ -5,6 +5,7 @@
 const std = @import("std");
 const io = std.io;
 const mem = std.mem;
+const File = std.fs.File;
 
 const ansi = @import("ansi.zig");
 const ANSIFilter = ansi.ANSIFilter;
@@ -14,7 +15,7 @@ pub var use_color: bool = true;
 /// Print to stderr. This makes sure that ANSI codes are handled
 /// according to whether or not they are disabled.
 pub fn print(comptime fmt: []const u8, args: anytype) void {
-    const stderr = std.io.getStdErr().writer();
+    const stderr = File.stdout().deprecatedWriter();
     std.debug.lockStdErr();
     defer std.debug.unlockStdErr();
 

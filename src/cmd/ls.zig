@@ -6,7 +6,8 @@ const fs = std.fs;
 const json = std.json;
 const meta = std.meta;
 const Allocator = mem.Allocator;
-const ArrayList = std.ArrayList;
+const ArrayList = std.array_list.Managed;
+const File = fs.File;
 
 const narz = @import("narz");
 const LsFlags = @import("args.zig").LsFlags;
@@ -15,83 +16,89 @@ const log = @import("log.zig");
 const utils = @import("utils");
 
 pub fn lsMain(alloc: Allocator, args: LsFlags) !void {
-    const archiveFilename = args.positional.archive;
+    const archive_filename = args.positional.archive;
 
-    const objectPath = utils.normalizePath(alloc, args.positional.path) catch |err| {
+    const object_path = utils.normalizePath(alloc, args.positional.path) catch |err| {
         log.err("failed to normalize path: {s}", .{@errorName(err)});
         return err;
     };
-    defer alloc.free(objectPath);
+    defer alloc.free(object_path);
 
-    const archiveFile = fs.cwd().openFile(archiveFilename, .{ .mode = .read_only }) catch |err| {
+    var archive_file = fs.cwd().openFile(archive_filename, .{ .mode = .read_only }) catch |err| {
         log.err("failed to open archive: {s}", .{@errorName(err)});
         return err;
     };
-    defer archiveFile.close();
+    defer archive_file.close();
 
-    const parsedArchive = narz.Parser.parseFromReader(alloc, archiveFile.reader()) catch |err| {
+    var archive_file_reader = archive_file.reader(&.{});
+
+    const parsed_archive = narz.Parser.parseFromReader(alloc, &archive_file_reader.interface) catch |err| {
         log.err("failed to parse archive: {s}", .{@errorName(err)});
         return err;
     };
-    defer parsedArchive.deinit();
+    defer parsed_archive.deinit();
 
-    const archive = parsedArchive.value;
+    const archive = parsed_archive.value;
 
-    const parentDirname = fs.path.dirname(objectPath) orelse "/";
+    const parent_dirname = fs.path.dirname(object_path) orelse "/";
 
-    const parentDirObject = try archive.getObject(alloc, parentDirname) orelse {
-        log.err("path '{s}' does not exist in the archive", .{parentDirname});
+    const parent_dir_object = try archive.getObject(alloc, parent_dirname) orelse {
+        log.err("path '{s}' does not exist in the archive", .{parent_dirname});
         return error.NotExists;
     };
 
-    if (meta.activeTag(parentDirObject) != .directory) {
-        log.err("path '{s}' is not a directory in the archive", .{parentDirname});
+    if (meta.activeTag(parent_dir_object) != .directory) {
+        log.err("path '{s}' is not a directory in the archive", .{parent_dirname});
         log.info("the archive may be corrupted", .{});
         return error.NotADirectory;
     }
 
-    var object: narz.NarObject = undefined;
+    var object: narz.Object = undefined;
 
-    if (mem.eql(u8, parentDirname, "/")) {
-        object = parentDirObject;
+    if (mem.eql(u8, parent_dirname, "/")) {
+        object = parent_dir_object;
     } else {
-        const objectBasename = fs.path.basename(objectPath);
+        const object_basename = fs.path.basename(object_path);
 
-        for (parentDirObject.directory.entries) |entry| {
-            if (mem.eql(u8, entry.name, objectBasename)) {
+        for (parent_dir_object.directory.entries) |entry| {
+            if (mem.eql(u8, entry.name, object_basename)) {
                 object = entry.object;
                 break;
             }
         } else {
-            log.err("path '{s}' does not exist in the directory '{s}'", .{ objectPath, objectBasename });
+            log.err("path '{s}' does not exist in the directory '{s}'", .{ object_path, object_basename });
             log.info("the archive may be corrupted", .{});
             return error.NotExists;
         }
     }
 
-    const stdout = io.getStdOut().writer();
+    var stdout = File.stdout();
+    var stdout_writer = stdout.writer(&.{}).interface;
 
     if (!args.json) {
         if (args.recursive) {
-            try lstree(alloc, stdout, object, args.long);
+            try lsTree(alloc, &stdout_writer, object, args.long);
         } else {
-            try printObjLine(stdout, objectPath, object, args.long);
+            try printObjLine(&stdout_writer, object_path, object, args.long);
         }
     } else {
-        var writer = json.writeStream(stdout, .{ .whitespace = .indent_2 });
+        var write_stream = json.Stringify{
+            .options = .{ .whitespace = .indent_2 },
+            .writer = &stdout_writer,
+        };
 
         if (args.recursive) {
-            try narObjectJsonRecursive(alloc, &writer, object, true);
+            try objectJsonRecursive(&write_stream, object, true);
         } else {
-            try narObjectJson(&writer, object);
+            try objectJson(&write_stream, object);
         }
 
         try stdout.writeAll("\n");
     }
 }
 
-fn lstree(alloc: Allocator, writer: anytype, root: narz.NarObject, long: bool) !void {
-    const NodeType = struct { narz.NarObject, []const u8 };
+fn lsTree(alloc: Allocator, writer: *io.Writer, root: narz.Object, long: bool) !void {
+    const NodeType = struct { narz.Object, []const u8 };
 
     var stack = ArrayList(NodeType).init(alloc);
     defer stack.deinit();
@@ -126,16 +133,16 @@ fn lstree(alloc: Allocator, writer: anytype, root: narz.NarObject, long: bool) !
             // so that the top of the stack is the first alphabetical entry.
             var i: usize = entries.len;
             while (i > 0) : (i -= 1) {
-                const nestedEntry = entries[i - 1];
+                const nested_entry = entries[i - 1];
 
-                const new_path = try fs.path.join(alloc, &.{ path, nestedEntry.name });
-                try stack.append(.{ nestedEntry.object, new_path });
+                const new_path = try fs.path.join(alloc, &.{ path, nested_entry.name });
+                try stack.append(.{ nested_entry.object, new_path });
             }
         }
     }
 }
 
-fn printObjLine(writer: anytype, name: []const u8, obj: narz.NarObject, long: bool) !void {
+fn printObjLine(writer: *io.Writer, name: []const u8, obj: narz.Object, long: bool) !void {
     if (!long) {
         try writer.print("{s}\n", .{name});
         return;
@@ -161,97 +168,98 @@ fn printObjLine(writer: anytype, name: []const u8, obj: narz.NarObject, long: bo
     try writer.writeAll("\n");
 }
 
-fn narObjectJsonRecursive(alloc: Allocator, writer: anytype, obj: narz.NarObject, wrap_object: bool) !void {
+fn objectJsonRecursive(write_stream: *json.Stringify, obj: narz.Object, wrap_object: bool) !void {
     if (wrap_object) {
-        try writer.beginObject();
+        try write_stream.beginObject();
     }
 
-    try writer.objectField("type");
+    try write_stream.objectField("type");
 
     switch (obj) {
-        .file => try writer.write("file"),
-        .symlink => try writer.write("symlink"),
-        .directory => try writer.write("directory"),
+        .file => try write_stream.write("file"),
+        .symlink => try write_stream.write("symlink"),
+        .directory => try write_stream.write("directory"),
     }
 
     switch (obj) {
         .file => |f| {
-            try writer.objectField("executable");
-            try writer.write(f.executable);
+            try write_stream.objectField("executable");
+            try write_stream.write(f.executable);
         },
 
         .symlink => |s| {
-            try writer.objectField("target");
-            try writer.write(s.target);
+            try write_stream.objectField("target");
+            try write_stream.write(s.target);
         },
 
         .directory => |d| {
-            try writer.objectField("entries");
-            try writer.beginArray();
+            try write_stream.objectField("entries");
+            try write_stream.beginArray();
 
             for (d.entries) |entry| {
-                try writer.beginObject();
-                try writer.objectField("name");
-                try writer.write(entry.name);
+                try write_stream.beginObject();
+                try write_stream.objectField("name");
+                try write_stream.write(entry.name);
 
-                try narObjectJsonRecursive(alloc, writer, entry.object, false);
+                // TODO: replace with stack?
+                try objectJsonRecursive(write_stream, entry.object, false);
 
-                try writer.endObject();
+                try write_stream.endObject();
             }
 
-            try writer.endArray();
+            try write_stream.endArray();
         },
     }
 
     if (wrap_object) {
-        try writer.endObject();
+        try write_stream.endObject();
     }
 }
 
-fn narObjectJson(writer: anytype, obj: narz.NarObject) !void {
-    try writer.beginObject();
+fn objectJson(write_stream: *json.Stringify, obj: narz.Object) !void {
+    try write_stream.beginObject();
 
-    try writer.objectField("type");
+    try write_stream.objectField("type");
 
     switch (obj) {
-        .file => try writer.write("file"),
-        .symlink => try writer.write("symlink"),
-        .directory => try writer.write("directory"),
+        .file => try write_stream.write("file"),
+        .symlink => try write_stream.write("symlink"),
+        .directory => try write_stream.write("directory"),
     }
 
     switch (obj) {
         .file => |f| {
-            try writer.objectField("executable");
-            try writer.write(f.executable);
+            try write_stream.objectField("executable");
+            try write_stream.write(f.executable);
         },
 
         .symlink => |s| {
-            try writer.objectField("target");
-            try writer.write(s.target);
+            try write_stream.objectField("target");
+            try write_stream.write(s.target);
         },
 
         .directory => |d| {
-            try writer.objectField("entries");
-            try writer.beginArray();
+            try write_stream.objectField("entries");
+            try write_stream.beginArray();
 
             for (d.entries) |entry| {
-                try writer.beginObject();
-                try writer.objectField("name");
-                try writer.write(entry.name);
+                try write_stream.beginObject();
+                try write_stream.objectField("name");
+                try write_stream.write(entry.name);
 
-                try writer.objectField("type");
+                try write_stream.objectField("type");
                 switch (obj) {
-                    .file => try writer.write("file"),
-                    .symlink => try writer.write("symlink"),
-                    .directory => try writer.write("directory"),
+                    .file => try write_stream.write("file"),
+                    .symlink => try write_stream.write("symlink"),
+                    .directory => try write_stream.write("directory"),
                 }
 
-                try writer.endObject();
+                try write_stream.endObject();
             }
 
-            try writer.endArray();
+            try write_stream.endArray();
         },
     }
 
-    try writer.endObject();
+    try write_stream.endObject();
 }

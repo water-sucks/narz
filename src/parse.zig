@@ -4,7 +4,7 @@ const mem = std.mem;
 const io = std.io;
 const fmt = std.fmt;
 const Allocator = mem.Allocator;
-const ArrayList = std.ArrayList;
+const ArrayList = std.array_list.Managed;
 
 const narTypes = @import("nar.zig");
 const NarArchive = narTypes.NarArchive;
@@ -33,17 +33,16 @@ pub const NarParseError = error{
     InvalidMagic,
     InvalidNarArchiveVersion,
     UnexpectedValue,
-} || Allocator.Error || std.posix.ReadError || error{EndOfStream};
+} || Allocator.Error || io.Reader.Error;
 
 pub const ParsedNarArchive = Parsed(NarArchive);
 
 pub fn parseFromSlice(allocator: Allocator, slice: []const u8) !ParsedNarArchive {
-    var reader = io.fixedBufferStream(slice);
-
-    return try parseFromReader(allocator, reader.reader());
+    var reader = io.Reader.fixed(slice);
+    return try parseFromReader(allocator, &reader);
 }
 
-pub fn parseFromReader(allocator: Allocator, reader: anytype) !ParsedNarArchive {
+pub fn parseFromReader(allocator: Allocator, reader: *io.Reader) !ParsedNarArchive {
     var arena = heap.ArenaAllocator.init(allocator);
     errdefer arena.deinit();
     const alloc = arena.allocator();
@@ -64,7 +63,7 @@ pub fn parseFromReader(allocator: Allocator, reader: anytype) !ParsedNarArchive 
 
 const NIX_ARCHIVE_PREFIX_MAGIC = "nix-archive-";
 
-fn expectHeaderAndArchiveVersion(alloc: Allocator, reader: anytype) !usize {
+fn expectHeaderAndArchiveVersion(alloc: Allocator, reader: *io.Reader) !usize {
     const magic = try readString(alloc, reader);
 
     if (!mem.startsWith(u8, magic, NIX_ARCHIVE_PREFIX_MAGIC)) {
@@ -82,7 +81,7 @@ fn expectHeaderAndArchiveVersion(alloc: Allocator, reader: anytype) !usize {
     return version;
 }
 
-fn expectObject(alloc: Allocator, reader: anytype) NarParseError!NarObject {
+fn expectObject(alloc: Allocator, reader: *io.Reader) NarParseError!NarObject {
     try expectStringValue(alloc, reader, "(");
     try expectStringValue(alloc, reader, "type");
 
@@ -109,7 +108,7 @@ fn expectObject(alloc: Allocator, reader: anytype) NarParseError!NarObject {
     return parsed;
 }
 
-fn expectNarFile(alloc: Allocator, reader: anytype) NarParseError!NarFile {
+fn expectNarFile(alloc: Allocator, reader: *io.Reader) NarParseError!NarFile {
     var parsed: NarFile = undefined;
 
     var next = try readString(alloc, reader);
@@ -131,7 +130,7 @@ fn expectNarFile(alloc: Allocator, reader: anytype) NarParseError!NarFile {
     return parsed;
 }
 
-fn expectNarDirectory(alloc: Allocator, reader: anytype) !NarDirectory {
+fn expectNarDirectory(alloc: Allocator, reader: *io.Reader) !NarDirectory {
     var parsed: NarDirectory = undefined;
 
     var entries = ArrayList(NarDirectoryEntry).init(alloc);
@@ -150,7 +149,7 @@ fn expectNarDirectory(alloc: Allocator, reader: anytype) !NarDirectory {
     return parsed;
 }
 
-fn expectNarDirectoryEntry(alloc: Allocator, reader: anytype) NarParseError!NarDirectoryEntry {
+fn expectNarDirectoryEntry(alloc: Allocator, reader: *io.Reader) NarParseError!NarDirectoryEntry {
     const entryDecl = try readString(alloc, reader);
 
     if (mem.eql(u8, entryDecl, ")")) {
@@ -174,7 +173,7 @@ fn expectNarDirectoryEntry(alloc: Allocator, reader: anytype) NarParseError!NarD
     return entry;
 }
 
-fn expectNarSymlink(alloc: Allocator, reader: anytype) !NarSymlink {
+fn expectNarSymlink(alloc: Allocator, reader: *io.Reader) !NarSymlink {
     var parsed: NarSymlink = undefined;
 
     try expectStringValue(alloc, reader, "target");
@@ -184,7 +183,7 @@ fn expectNarSymlink(alloc: Allocator, reader: anytype) !NarSymlink {
     return parsed;
 }
 
-fn expectStringValue(alloc: Allocator, reader: anytype, expected: []const u8) !void {
+fn expectStringValue(alloc: Allocator, reader: *io.Reader, expected: []const u8) !void {
     const actual = try readString(alloc, reader);
     defer alloc.free(actual);
 
@@ -193,22 +192,23 @@ fn expectStringValue(alloc: Allocator, reader: anytype, expected: []const u8) !v
     }
 }
 
-fn readString(alloc: Allocator, reader: anytype) ![]const u8 {
-    const len = try reader.readInt(u64, .little);
+fn readString(alloc: Allocator, reader: *io.Reader) ![]const u8 {
+    var len_buf: [8]u8 = undefined;
+
+    try reader.readSliceAll(len_buf[0..]);
+    const len = mem.readInt(u64, len_buf[0..], .little);
 
     if (len == 0) {
         return "";
     }
 
-    const result = try alloc.alloc(u8, len);
+    const result = try reader.readAlloc(alloc, len);
     errdefer alloc.free(result);
-
-    try reader.readNoEof(result);
 
     const remainder = len % 8;
     if (remainder > 0) {
         const bytesToSkip = 8 - remainder;
-        try reader.skipBytes(bytesToSkip, .{});
+        try reader.discardAll(bytesToSkip);
     }
 
     return result;

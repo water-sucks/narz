@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const fs = std.fs;
 const Allocator = mem.Allocator;
-const ArrayList = std.ArrayList;
+const ArrayList = std.array_list.Managed;
 
 const utils = @import("utils");
 
