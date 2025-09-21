@@ -17,7 +17,7 @@ stdenv.mkDerivation (finalAttrs: {
       inherit stdenv zig;
       name = finalAttrs.pname;
       src = finalAttrs.src;
-      depsHash = "sha256-ilhHDbKjGalT4FeOIahjWazCGwA2b48MxDWbPy0KIEU=";
+      depsHash = "sha256-FIu1AqZ5zhNErcCIPJnE/mlYX+V++BdCB7oiIdvjq4c=";
     };
   in ''
     mkdir -p .cache
