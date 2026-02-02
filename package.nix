@@ -15,9 +15,8 @@ stdenv.mkDerivation (finalAttrs: {
   postPatch = let
     deps = fetchZigDeps {
       inherit stdenv zig;
-      name = finalAttrs.pname;
-      src = finalAttrs.src;
-      depsHash = "sha256-FIu1AqZ5zhNErcCIPJnE/mlYX+V++BdCB7oiIdvjq4c=";
+      inherit (finalAttrs) pname version src;
+      hash = "sha256-FIu1AqZ5zhNErcCIPJnE/mlYX+V++BdCB7oiIdvjq4c=";
     };
   in ''
     mkdir -p .cache
