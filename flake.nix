@@ -27,8 +27,9 @@
 
         devShells.default = pkgs.mkShell {
           name = "narz-shell";
-          buildInputs = [
+          packages = [
             pkgs.zig
+            pkgs.zls
           ];
         };
       };
