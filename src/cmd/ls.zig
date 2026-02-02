@@ -57,17 +57,18 @@ pub fn lsMain(alloc: Allocator, args: LsFlags) !void {
 
     if (mem.eql(u8, parent_dirname, "/")) {
         object = parent_dir_object;
-    } else {
-        const object_basename = fs.path.basename(object_path);
+    }
 
+    const object_basename = fs.path.basename(object_path);
+
+    if (object_basename.len > 0) {
         for (parent_dir_object.directory.entries) |entry| {
             if (mem.eql(u8, entry.name, object_basename)) {
                 object = entry.object;
                 break;
             }
         } else {
-            log.err("path '{s}' does not exist in the directory '{s}'", .{ object_path, object_basename });
-            log.info("the archive may be corrupted", .{});
+            log.err("path '{s}' does not exist in the directory '{s}'", .{ object_basename, parent_dirname });
             return error.NotExists;
         }
     }

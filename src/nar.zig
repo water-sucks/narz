@@ -17,7 +17,7 @@ pub const NarArchive = struct {
         const writer = repr.writer();
 
         try writer.print("nix-archive-{d} ", .{self.version});
-        try printNar(repr.writer(), self.object, 0);
+        try printNar(writer, self.object, 0);
 
         return repr.toOwnedSlice();
     }
